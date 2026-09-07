@@ -39,6 +39,13 @@ import type { ContextLevel, SystemCatalog, SystemConfig, SystemId } from '../typ
 
 const execFileAsync = promisify(execFile);
 
+// Windows refuses fs.symlink(..., 'dir') to unprivileged processes (EPERM)
+// unless Developer Mode is on. Directory junctions are functionally
+// equivalent for our purpose (node_modules resolution) and need no
+// elevation, so prefer them on win32. Requires an absolute target — every
+// call site here already passes one.
+const DIR_LINK_TYPE: 'dir' | 'junction' = process.platform === 'win32' ? 'junction' : 'dir';
+
 const NPM_CACHE_DIR = join(PKG_ROOT, '.npm-cache');
 const SYSTEM_ROOT_PLACEHOLDER = '__SYSTEM_ROOT__';
 const COMPONENTS_PKG_PLACEHOLDER = '__COMPONENTS_PKG__';
@@ -425,8 +432,15 @@ export function substitutePlaceholders(destDir: string, cfg: SystemConfig): void
   for (const rel of SUBSTITUTED_FILES) {
     const filePath = join(destDir, rel);
     if (!existsSync(filePath)) continue;
+    // Forward slashes, always. cfg.root is resolve()d, so on Windows it
+    // arrives backslash-separated - and the substitution targets are JSON
+    // (tsconfig.json, where a backslash escape like \U is invalid) and TS
+    // string literals (vite.config.ts, where it silently collapses). Windows
+    // accepts forward slashes in both tsc path mappings and Vite aliases, so
+    // normalizing is the only form that survives both file types.
+    const systemRoot = cfg.root.split('\\').join('/');
     const next = readFileSync(filePath, 'utf8')
-      .split(SYSTEM_ROOT_PLACEHOLDER).join(cfg.root)
+      .split(SYSTEM_ROOT_PLACEHOLDER).join(systemRoot)
       .split(COMPONENTS_PKG_PLACEHOLDER).join(cfg.componentsPkg)
       .split(FOUNDATIONS_PKG_PLACEHOLDER).join(cfg.foundationsPkg)
       .split(COMPONENTS_SRC_PLACEHOLDER).join(cfg.componentsSrc)
@@ -438,7 +452,7 @@ export function substitutePlaceholders(destDir: string, cfg: SystemConfig): void
 function linkNodeModules(templateDirPath: string, destDir: string): void {
   const dest = join(destDir, 'node_modules');
   removeIfExists(dest);
-  symlinkSync(join(templateDirPath, 'node_modules'), dest, 'dir');
+  symlinkSync(join(templateDirPath, 'node_modules'), dest, DIR_LINK_TYPE);
 }
 
 function removeIfExists(p: string): void {
@@ -664,7 +678,13 @@ function injectContext(systemCfg: SystemConfig, context: ContextLevel, destDir: 
 }
 
 async function commitBaseline(destDir: string): Promise<void> {
-  const git = (args: string[]) => execFileAsync('git', args, { cwd: destDir, maxBuffer: 10 * 1024 * 1024 });
+  // core.longpaths: the workspace carries a node_modules link, and Windows'
+  // 260-char MAX_PATH makes `git add -A` abort with "Filename too long" on
+  // deep transitive dependency paths, failing the whole cell before the
+  // agent ever runs. The template's .gitignore keeps node_modules out of the
+  // index anyway; this is the belt to that pair of braces.
+  const git = (args: string[]) =>
+    execFileAsync('git', ['-c', 'core.longpaths=true', ...args], { cwd: destDir, maxBuffer: 10 * 1024 * 1024 });
   await git(['init']);
   await git(['add', '-A']);
   // -c commit.gpgsign=false: this is a disposable, local-only scratch repo used
@@ -713,7 +733,7 @@ export function ensureWorkspaceNodeModules(workspaceDir: string, system: SystemI
   if (!existsSync(target)) {
     throw new Error(`fixture node_modules missing for ${system} — run prepareTemplate first`);
   }
-  symlinkSync(target, dest, 'dir');
+  symlinkSync(target, dest, DIR_LINK_TYPE);
   return () => {
     try {
       unlinkSync(dest);

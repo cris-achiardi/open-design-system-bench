@@ -15,18 +15,25 @@ const execFileAsync = promisify(execFile);
 const TIMEOUT_MS = 120_000;
 const MAX_ERROR_LINES = 20;
 
-function resolveTsc(workspaceDir: string): string {
-  const workspaceTsc = join(workspaceDir, 'node_modules', '.bin', 'tsc');
-  if (existsSync(workspaceTsc)) return workspaceTsc;
-  return join(PKG_ROOT, 'node_modules', '.bin', 'tsc');
+// Resolve TypeScript's own JS entry rather than npm's .bin shim. The shim is a
+// POSIX sh script plus a sibling .cmd wrapper, and Windows can spawn neither
+// directly (ENOENT for the extensionless script, EINVAL for the .cmd unless a
+// shell is involved). Running the entry with the current node binary sidesteps
+// shims entirely and behaves identically on every platform.
+function resolveTscEntry(workspaceDir: string): string {
+  for (const dir of [workspaceDir, PKG_ROOT]) {
+    const candidate = join(dir, 'node_modules', 'typescript', 'bin', 'tsc');
+    if (existsSync(candidate)) return candidate;
+  }
+  return join(PKG_ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
 }
 
 export async function gradeCompile(ctx: GradeContext): Promise<DimensionResult> {
-  const tscBin = resolveTsc(ctx.workspaceDir);
+  const tscEntry = resolveTscEntry(ctx.workspaceDir);
   const tsconfigPath = join(ctx.workspaceDir, 'tsconfig.json');
 
   try {
-    await execFileAsync(tscBin, ['--noEmit', '-p', tsconfigPath], {
+    await execFileAsync(process.execPath, [tscEntry, '--noEmit', '-p', tsconfigPath], {
       cwd: ctx.workspaceDir,
       timeout: TIMEOUT_MS,
       maxBuffer: 10 * 1024 * 1024,

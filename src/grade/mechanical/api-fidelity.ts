@@ -141,6 +141,26 @@ export function gradeApiFidelity(ctx: GradeContext): DimensionResult {
       if (!matchesPkg(imp.source, ctx.systemCfg.componentsPkg)) continue;
       anySystemUsage = true;
 
+      // Subpath entries (e.g. "<pkg>/icons") are outside what the docgen
+      // catalog can enumerate: a subpath barrel may re-export a third-party
+      // package wholesale (`export * from 'lucide-react'`), and a bare
+      // specifier has no directory for the barrel walk to resolve. Those
+      // symbols are real and typecheck, so scoring them as hallucinations
+      // punishes correct code. Record them as unverifiable instead - the same
+      // treatment member-expression JSX already gets below - and let the
+      // compile dimension catch genuinely missing exports.
+      if (imp.source !== ctx.systemCfg.componentsPkg) {
+        for (const { imported } of imp.names) {
+          if (imported === '__default__' || imported === '*') continue;
+          if (validExports.has(imported)) continue;
+          diffs.push({
+            dimension: 'apiFidelity',
+            message: `'${imported}' imported from ${imp.source} in ${file.path} - subpath export, not verifiable against the catalog.`,
+          });
+        }
+        continue;
+      }
+
       for (const { imported, local } of imp.names) {
         if (imported === '__default__' || imported === '*') continue; // unverifiable, not tracked
 
