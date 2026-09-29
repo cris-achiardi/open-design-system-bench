@@ -22,8 +22,25 @@ import { parseTask } from './schema.ts';
  * - List: "the server list" (connection-status-indicator) uses "list" as the
  *   ordinary English noun for a collection, not a reference to a system's
  *   `List` component.
+ * - Step: "add a step that makes sure users don't delete their account by
+ *   accident" (confirm-account-deletion) uses "step" as the ordinary English
+ *   noun for a stage in a process, not a reference to a system's `Step`
+ *   component. The task's hidden answer is a confirmation pattern; `Step`
+ *   would not help an agent find it.
+ * - Calendar: "connect your calendar" (onboarding-flow) names a thing in the
+ *   scenario the user is setting up, not the component to build the flow
+ *   with. That task's hidden answer is the multi-step progress pattern.
  */
-export const GENERIC_SYMBOL_ALLOWLIST = ['Text', 'Link', 'Card', 'Icon', 'Form', 'List'] as const;
+export const GENERIC_SYMBOL_ALLOWLIST = [
+  'Text',
+  'Link',
+  'Card',
+  'Icon',
+  'Form',
+  'List',
+  'Step',
+  'Calendar',
+] as const;
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

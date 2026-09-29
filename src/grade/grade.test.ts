@@ -131,6 +131,55 @@ test('gradeApiFidelity puts an invented prop at review, not fail', () => {
   assert.ok(result.diffs.some((d) => d.message.includes('madeUpProp')));
 });
 
+test('gradeApiFidelity checks props on a component imported through a subpath entry', () => {
+  // A system whose documented import style is the subpath (astryx teaches
+  // `@astryxdesign/core/Button`) used to skip prop verification entirely, so
+  // the cell that followed the docs was the one graded on nothing.
+  const ctx = makeCtx([
+    file(
+      'src/App.tsx',
+      `import { Button } from '@acme-ui/components/Button';
+export function App() { return <Button madeUpProp="x" />; }
+`,
+    ),
+  ]);
+  const result = gradeApiFidelity(ctx);
+  assert.equal(result.gate, 'review');
+  assert.ok(result.diffs.some((d) => d.message.includes('madeUpProp')));
+});
+
+test('gradeApiFidelity accepts a real prop on a subpath-imported component', () => {
+  const ctx = makeCtx([
+    file(
+      'src/App.tsx',
+      `import { Button } from '@acme-ui/components/Button';
+export function App() { return <Button variant="primary" />; }
+`,
+    ),
+  ]);
+  const result = gradeApiFidelity(ctx);
+  assert.equal(result.gate, 'pass');
+  assert.deepEqual(result.diffs, []);
+});
+
+test('gradeApiFidelity still treats a subpath symbol the catalog does not know as unverifiable, not hallucinated', () => {
+  // A subpath barrel may re-export a third party wholesale
+  // (`export * from 'lucide-react'`). Those symbols typecheck, so they must
+  // not score as hallucinations - only as unverifiable.
+  const ctx = makeCtx([
+    file(
+      'src/App.tsx',
+      `import { TrashIcon } from '@acme-ui/components/icons';
+export function App() { return <TrashIcon size={16} />; }
+`,
+    ),
+  ]);
+  const result = gradeApiFidelity(ctx);
+  assert.equal(result.gate, 'pass');
+  assert.ok(result.diffs.some((d) => d.message.includes('not verifiable against the catalog')));
+  assert.ok(!result.diffs.some((d) => d.message.includes('Hallucinated')));
+});
+
 test('gradeApiFidelity tags cross-system contamination props', () => {
   const ctx = makeCtx([
     file(

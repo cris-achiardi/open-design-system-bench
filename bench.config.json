@@ -79,6 +79,83 @@
         "confirm-account-deletion"
       ],
       "reps": 1
+    },
+    "astryx-smoke": {
+      "systems": [
+        "astryx"
+      ],
+      "contexts": [
+        "bare",
+        "agents-md"
+      ],
+      "models": [
+        "sonnet"
+      ],
+      "tasks": [
+        "confirm-account-deletion"
+      ],
+      "reps": 1
+    },
+    "astryx-small": {
+      "systems": [
+        "astryx"
+      ],
+      "contexts": [
+        "bare",
+        "agents-md"
+      ],
+      "models": [
+        "sonnet"
+      ],
+      "tasks": [
+        "confirm-account-deletion",
+        "success-feedback",
+        "settings-toggle-section",
+        "cancel-plan-action-hierarchy",
+        "connection-status-indicator"
+      ],
+      "reps": 1
+    },
+    "astryx-full": {
+      "systems": [
+        "astryx"
+      ],
+      "contexts": [
+        "bare",
+        "agents-md",
+        "skill"
+      ],
+      "models": [
+        "sonnet"
+      ],
+      "tasks": "*",
+      "reps": 3
+    },
+    "astryx-repo-docs-compare": {
+      "systems": [
+        "astryx-repo-docs"
+      ],
+      "contexts": [
+        "agents-md"
+      ],
+      "models": [
+        "sonnet"
+      ],
+      "tasks": "*",
+      "reps": 3
+    },
+    "astryx-skill-v2": {
+      "systems": [
+        "astryx"
+      ],
+      "contexts": [
+        "skill"
+      ],
+      "models": [
+        "sonnet"
+      ],
+      "tasks": "*",
+      "reps": 3
     }
   },
   "providers": {

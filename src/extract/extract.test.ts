@@ -15,7 +15,13 @@ import { test } from 'node:test';
 
 import type { SystemConfig } from '../types.ts';
 import { extractDocgenCatalog, splitOwnInherited } from './catalog-docgen.ts';
-import { collectBarrelExports, findTsconfigUpward, resolveBarrelPath, resolveTsconfigUpward } from './normalize.ts';
+import {
+  buildIndexes,
+  collectBarrelExports,
+  findTsconfigUpward,
+  resolveBarrelPath,
+  resolveTsconfigUpward,
+} from './normalize.ts';
 
 function writeSyntheticSystem(): string {
   const root = mkdtempSync(join(tmpdir(), 'odsys-extract-'));
@@ -566,4 +572,43 @@ test('a parent-side default alias survives next to a resolvable export * (the MU
   const catalog = await extractDocgenCatalog('synthetic', makeConfig(root));
   const names = catalog.components.flatMap((c) => c.exports.map((e) => e.displayName));
   assert.ok(names.includes('Accordion'), `parent-side alias lost: ${JSON.stringify(names)}`);
+});
+
+test('buildIndexes unions the props of a name exported from more than one dir, and dedupes allExports', () => {
+  // The astryx shape: Card lives in Card/ and is ALSO re-exported from
+  // Layout/, where docgen extracts nothing. Overwriting made the empty one
+  // win and erased Card's whole prop surface, so every valid prop passed to
+  // <Card> scored as invented.
+  const { allExports, allPropsByExport } = buildIndexes([
+    {
+      dir: 'Card',
+      exports: [
+        {
+          displayName: 'Card',
+          description: 'the real one',
+          props: [
+            { name: 'padding', type: 'SpacingStep', required: false },
+            { name: 'variant', type: 'CardVariant', required: false },
+          ],
+          inheritedProps: ['xstyle'],
+        },
+      ],
+    },
+    {
+      dir: 'Layout',
+      exports: [{ displayName: 'Card', description: 'docgen could not extract props', props: [] }],
+    },
+  ]);
+
+  assert.deepEqual(allExports, ['Card'], 'one name is one export, however many dirs reach it');
+  assert.deepEqual(allPropsByExport.Card, ['padding', 'variant']);
+});
+
+test('buildIndexes keeps props from both sides when each dir documents a different subset', () => {
+  const { allPropsByExport } = buildIndexes([
+    { dir: 'A', exports: [{ displayName: 'Stack', description: '', props: [{ name: 'gap', type: 'number', required: false }] }] },
+    { dir: 'B', exports: [{ displayName: 'Stack', description: '', props: [{ name: 'direction', type: 'string', required: false }] }] },
+  ]);
+
+  assert.deepEqual([...allPropsByExport.Stack].sort(), ['direction', 'gap']);
 });

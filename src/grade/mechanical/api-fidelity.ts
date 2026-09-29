@@ -141,18 +141,30 @@ export function gradeApiFidelity(ctx: GradeContext): DimensionResult {
       if (!matchesPkg(imp.source, ctx.systemCfg.componentsPkg)) continue;
       anySystemUsage = true;
 
-      // Subpath entries (e.g. "<pkg>/icons") are outside what the docgen
-      // catalog can enumerate: a subpath barrel may re-export a third-party
-      // package wholesale (`export * from 'lucide-react'`), and a bare
-      // specifier has no directory for the barrel walk to resolve. Those
+      // Subpath entries (e.g. "<pkg>/icons") can carry symbols the docgen
+      // catalog cannot enumerate: a subpath barrel may re-export a
+      // third-party package wholesale (`export * from 'lucide-react'`), and a
+      // bare specifier has no directory for the barrel walk to resolve. Those
       // symbols are real and typecheck, so scoring them as hallucinations
       // punishes correct code. Record them as unverifiable instead - the same
       // treatment member-expression JSX already gets below - and let the
       // compile dimension catch genuinely missing exports.
+      //
+      // A name the catalog DOES know is a different case: the package cannot
+      // serve two different symbols under one public name, so
+      // `<pkg>/Card`'s Card is `<pkg>`'s Card and its props are verifiable.
+      // Mapping it makes the prop check apply. Skipping it did not merely
+      // lose coverage, it inverted the measurement for any system whose
+      // documented import style IS the subpath (field test: astryx's own
+      // docs teach `@astryxdesign/core/Button`, so the better-informed cell
+      // was the one graded on nothing).
       if (imp.source !== ctx.systemCfg.componentsPkg) {
-        for (const { imported } of imp.names) {
+        for (const { imported, local } of imp.names) {
           if (imported === '__default__' || imported === '*') continue;
-          if (validExports.has(imported)) continue;
+          if (validExports.has(imported)) {
+            localToExport.set(local, imported);
+            continue;
+          }
           diffs.push({
             dimension: 'apiFidelity',
             message: `'${imported}' imported from ${imp.source} in ${file.path} - subpath export, not verifiable against the catalog.`,

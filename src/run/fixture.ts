@@ -464,11 +464,19 @@ function removeIfExists(p: string): void {
   rmSync(p, { recursive: true, force: true });
 }
 
+// agentContext paths resolve against the system root, and `resolve` rather
+// than `join` so an ABSOLUTE entry is honoured as written. Relative entries
+// behave exactly as before; the absolute form exists because a system's
+// agent-facing doc is not always a file in its own repo. Astryx's is
+// generated: `astryx init` writes the consumer block into the CONSUMING
+// project, so the document a team using Astryx actually has does not exist
+// anywhere in the Astryx checkout to point at.
+
 /** Copies systemCfg.agentContext.agentsMd files into destDir root. First file becomes
  * both AGENTS.md and CLAUDE.md; any further files keep their own basename. */
 function injectAgentsMd(systemCfg: SystemConfig, destDir: string): void {
   systemCfg.agentContext.agentsMd.forEach((relPath, i) => {
-    const content = readFileSync(join(systemCfg.root, relPath));
+    const content = readFileSync(resolve(systemCfg.root, relPath));
     if (i === 0) {
       writeFileSync(join(destDir, 'AGENTS.md'), content);
       writeFileSync(join(destDir, 'CLAUDE.md'), content);
@@ -505,7 +513,7 @@ function injectSkillDirs(systemCfg: SystemConfig, destDir: string): void {
   };
 
   for (const dir of systemCfg.agentContext.skillDirs ?? []) {
-    const src = join(systemCfg.root, dir);
+    const src = resolve(systemCfg.root, dir);
     if (existsSync(join(src, 'SKILL.md'))) {
       copyBundle(src, basename(dir)); // a single skill bundle
       continue;
@@ -640,7 +648,7 @@ function injectExtraDocs(systemCfg: SystemConfig, destDir: string): void {
       }
       continue;
     }
-    const src = join(systemCfg.root, docPath);
+    const src = resolve(systemCfg.root, docPath);
     const dest = join(docsDir, basename(docPath));
     cpSync(src, dest, { recursive: true });
   }
