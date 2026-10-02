@@ -19,7 +19,12 @@ export interface FileAnalysis {
   imports: Array<{ source: string; names: Array<{ imported: string; local: string }> }>;
   jsxElements: Array<{ base: string; full: string; attrs: string[]; hasSpread: boolean; line: number }>;
   classNameLiterals: Array<{ value: string; line: number }>;
-  inlineStyles: Array<{ prop: string; value: string; line: number }>;
+  /**
+   * Style declarations: inline `style={{...}}` objects, and for an Angular
+   * cell (src/grade/angular.ts) the component's stylesheet declarations too,
+   * marked `origin: 'stylesheet'`.
+   */
+  inlineStyles: Array<{ prop: string; value: string; line: number; origin?: 'stylesheet' }>;
 }
 
 const CLASSNAME_CALL_NAMES = new Set(['cx', 'cn', 'clsx', 'twMerge', 'tv']);
@@ -75,7 +80,9 @@ export function analyzeSource(path: string, source: string): FileAnalysis {
   try {
     ast = parse(source, {
       sourceType: 'module',
-      plugins: ['typescript', 'jsx'],
+      // decorators-legacy: an Angular component file is decorated, and
+      // without the plugin the parse fails and its imports go unread.
+      plugins: ['typescript', 'jsx', 'decorators-legacy'],
       errorRecovery: true,
     });
   } catch {

@@ -93,12 +93,19 @@ function findClassNameViolations(value: string, line: number, filePath: string):
   return findings;
 }
 
-function findInlineStyleViolation(prop: string, value: string, line: number, filePath: string): Finding | undefined {
+function findInlineStyleViolation(
+  prop: string,
+  value: string,
+  line: number,
+  filePath: string,
+  origin?: 'stylesheet',
+): Finding | undefined {
   const kind = classifyText(value);
   if (!kind) return undefined;
+  const what = origin === 'stylesheet' ? 'Stylesheet declaration' : 'Inline style';
   return {
     kind,
-    message: `Inline style ${prop}: '${value}' in ${filePath}:${line} bypasses design tokens`,
+    message: `${what} ${prop}: '${value}' in ${filePath}:${line} bypasses design tokens`,
     fix:
       kind === 'color'
         ? `Use a design system color token instead of a raw value for '${prop}'.`
@@ -125,7 +132,7 @@ export function gradeTokenDiscipline(ctx: GradeContext): DimensionResult {
     }
 
     for (const style of file.analysis.inlineStyles) {
-      const finding = findInlineStyleViolation(style.prop, style.value, style.line, file.path);
+      const finding = findInlineStyleViolation(style.prop, style.value, style.line, file.path, style.origin);
       if (!finding) continue;
       if (hexAllowed && finding.kind === 'color') continue;
       violations += 1;

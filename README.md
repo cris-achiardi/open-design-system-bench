@@ -121,6 +121,7 @@ there (or pass `--systems a,b`) to benchmark several at once.
 | `fixtureTemplate` | no | Path to this system's fixture template app. Source mode falls back to `fixtures/<systemId>-app`, then the generic `fixtures/source-app`; `npm` mode uses `fixtures/npm-app` |
 | `consume` | no | `"source"` (default) or `"npm"` — see [npm-consume mode](#npm-consume-mode) below |
 | `componentModel` | no | `"react"` (default) or `"custom-elements"` for a system that ships web components (Stencil, Lit, a custom-element registry) — see [web-component systems](#web-component-systems) below |
+| `framework` | no | `"react"` (default) or `"angular"`: the app the agent writes the task in. `"angular"` needs `componentModel: "custom-elements"` and `consume: "source"` — see [Angular consumers](#angular-consumers) below |
 | `packageSpec` | `npm` only | npm install spec, e.g. `"@acme/ui"` or `"@acme/ui@^2.0.0"`; defaults to `componentsPkg` |
 | `cssEntry` | no | Import specifier for the system's stylesheet, e.g. `"@acme/ui/styles.css"`; optional, `npm` mode only |
 | `fixturePins` | no | Extra npm specs installed alongside `packageSpec`, for peer-dependency conflicts (a library still on React 18 needs `["react@^18.3.1", …]` against the template's React 19) |
@@ -198,6 +199,29 @@ its defaults are conventional React names, which no dashed tag matches — so li
 ```
 
 See [fixtures/README.md](fixtures/README.md) for the fixture's design constraints.
+
+### Angular consumers
+
+A web-component system is often consumed from Angular, not React. Set `"framework": "angular"` and
+the agent writes the task as a standalone Angular component (`fixtures/custom-elements-angular-app`,
+selector `task-screen`), with the elements as tags in its template. The scores mean the same thing
+they mean for a React cell:
+
+- **compile** runs the Angular compiler with `strictTemplates`, so templates are type-checked, not
+  just the TypeScript around them. Angular does not check attributes on a custom element
+  (`CUSTOM_ELEMENTS_SCHEMA` admits any), so a static value outside the element's literal union
+  (`variant="danger"` where it takes `'primary' | 'secondary'`) is checked against the catalog
+  and fails compile, as the generated JSX types make it fail in a React cell.
+- **imports, apiFidelity, a11yStatic, tokenDiscipline** read the template through a JSX rendering of
+  it (`src/grade/angular.ts`): the same elements, attributes, static values, event handlers and
+  text, on the same lines, with every Angular expression made opaque. Findings point at the
+  template's file and line.
+- **tokenDiscipline also reads the component's stylesheets** (`styles`, `styleUrl`), reported as
+  stylesheet declarations. A React cell's `.css` files are not read; in Angular they are where raw
+  values go, and skipping them would score every Angular cell 100.
+
+The agent gets `src/system-elements.d.ts` declaring each element on `HTMLElementTagNameMap`, the
+reference a React cell's agent gets as JSX declarations. Run `extract` before `run`.
 
 ## The static audit and the AI-Readiness Score
 

@@ -51,6 +51,7 @@ fixtures/*/
 !fixtures/source-app/
 !fixtures/npm-app/
 !fixtures/custom-elements-app/
+!fixtures/custom-elements-angular-app/
 
 # Local Claude Code settings (the checked-in skill under .claude/skills/ is intentional)
 .claude/settings.local.json

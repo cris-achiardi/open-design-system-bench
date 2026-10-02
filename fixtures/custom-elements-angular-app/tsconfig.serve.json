@@ -1,0 +1,12 @@
+// `ng serve` / `ng build` only: the type-checked program (tsconfig.json) plus
+// the alias that resolves the design system's registry to its source, which
+// the running app needs and the compile dimension must not see.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "__COMPONENTS_PKG__": ["__SYSTEM_ROOT__/__COMPONENTS_SRC__/index.ts"],
+      "__COMPONENTS_PKG__/*": ["__SYSTEM_ROOT__/__COMPONENTS_SRC__/*"]
+    }
+  }
+}

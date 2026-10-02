@@ -10,7 +10,8 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-const COLLECTED_EXTENSIONS = new Set(['.ts', '.tsx', '.css', '.jsx', '.js']);
+// .html and .scss: an Angular component's templateUrl and styleUrl files.
+const COLLECTED_EXTENSIONS = new Set(['.ts', '.tsx', '.css', '.scss', '.html', '.jsx', '.js']);
 
 export interface CollectResult {
   diffPatch: string;

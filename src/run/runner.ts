@@ -37,6 +37,7 @@ import { UsageLimitError, looksLikeUsageLimit } from '../agents/errors.ts';
 import { parseModelSpec } from '../providers/model-spec.ts';
 import { estimateApiCostUsd } from '../providers/pricing.ts';
 import { analyzeSource } from '../grade/ast.ts';
+import { analyzeAngularFiles, type RawFile } from '../grade/angular.ts';
 import type { AnalyzedFile, GradeContext } from '../grade/context.ts';
 import { runMechanical, composeResult } from '../grade/score.ts';
 import { judgeArtifact } from '../grade/judge.ts';
@@ -68,6 +69,7 @@ export interface RunOptions {
 }
 
 const GRADEABLE_EXT = /\.(tsx|ts|jsx|js)$/;
+const ANGULAR_GRADEABLE_EXT = /\.(ts|js|html|css|scss)$/;
 
 /** Marks a manifest.cells entry as not-yet-completed — resume treats any skipReason with this prefix as pending. */
 const PAUSED_PREFIX = 'paused:';
@@ -93,11 +95,15 @@ function loadSystemAssets(system: SystemId, catalogsDir: string, tokensDir: stri
   };
 }
 
-function buildSystemPrompt(context: CellSpec['context']): string {
+function buildSystemPrompt(context: CellSpec['context'], cfg?: SystemConfig): string {
   const base =
-    'Implement the requested feature in this workspace (a Vite React TypeScript app). ' +
-    'Put your implementation in src/task/ (see README.md). Do not modify files outside src/. ' +
-    'Do not run dev servers or install packages.';
+    cfg?.framework === 'angular'
+      ? 'Implement the requested feature in this workspace (an Angular TypeScript app with standalone components). ' +
+        'Put your implementation in src/task/: the app renders TaskComponent from src/task/task.component.ts. ' +
+        'Do not modify files outside src/. Do not run dev servers or install packages.'
+      : 'Implement the requested feature in this workspace (a Vite React TypeScript app). ' +
+        'Put your implementation in src/task/ (see README.md). Do not modify files outside src/. ' +
+        'Do not run dev servers or install packages.';
   // "bare" cells get one neutral pointer so the baseline measures doc quality,
   // not whether the agent thinks to look for a design system at all.
   return context === 'bare'
@@ -105,22 +111,29 @@ function buildSystemPrompt(context: CellSpec['context']): string {
     : base;
 }
 
-/** Read the graders' input files from a cell's collected files/ directory. */
-function readAnalyzedFiles(filesDir: string): AnalyzedFile[] {
-  if (!existsSync(filesDir)) return [];
-  const out: AnalyzedFile[] = [];
+/**
+ * Read the graders' input files from a cell's collected files/ directory. An
+ * Angular cell's templates and stylesheets are rendered into gradeable form
+ * by src/grade/angular.ts; everything else is analyzed as written.
+ */
+function readAnalyzedFiles(filesDir: string, cfg: SystemConfig): Pick<GradeContext, 'files' | 'angular'> {
+  if (!existsSync(filesDir)) return { files: [] };
+  const raw: RawFile[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const p = join(dir, entry.name);
       if (entry.isDirectory()) walk(p);
-      else if (GRADEABLE_EXT.test(entry.name)) {
-        const source = readFileSync(p, 'utf8');
-        out.push({ path: relative(filesDir, p), source, analysis: analyzeSource(p, source) });
+      else if (cfg.framework === 'angular' ? ANGULAR_GRADEABLE_EXT.test(entry.name) : GRADEABLE_EXT.test(entry.name)) {
+        raw.push({ path: relative(filesDir, p), source: readFileSync(p, 'utf8') });
       }
     }
   };
   walk(filesDir);
-  return out;
+  if (cfg.framework === 'angular') {
+    const { files, staticValues, templateErrors } = analyzeAngularFiles(raw);
+    return { files, angular: { staticValues, templateErrors } };
+  }
+  return { files: raw.map((f) => ({ ...f, analysis: analyzeSource(join(filesDir, f.path), f.source) })) };
 }
 
 /** compile grading needs the workspace's node_modules symlink; restore it for re-grades. */
@@ -143,7 +156,7 @@ export async function gradeCell(opts: {
 }): Promise<{ dimensions: DimensionResult[]; judgeRaw?: unknown }> {
   const { spec, task, assets } = opts;
   const workspaceDir = join(opts.cellDir, 'workspace');
-  const files = readAnalyzedFiles(join(opts.cellDir, 'files'));
+  const { files, angular } = readAnalyzedFiles(join(opts.cellDir, 'files'), opts.systemsConfig[spec.system]);
   const ctx: GradeContext = {
     system: spec.system,
     systemCfg: opts.systemsConfig[spec.system],
@@ -152,6 +165,7 @@ export async function gradeCell(opts: {
     task,
     files,
     workspaceDir,
+    angular,
   };
 
   const cleanup = ensureNodeModules(workspaceDir, spec.system, opts.systemsConfig[spec.system]);
@@ -596,7 +610,7 @@ export async function runBench(
           prompt: task.prompt,
           model: generateModel,
           provider,
-          appendSystemPrompt: buildSystemPrompt(spec.context),
+          appendSystemPrompt: buildSystemPrompt(spec.context, systemsConfig[spec.system]),
           addDirs: [],
           timeoutMs: (task.timeoutSec ?? bench.defaults.taskTimeoutSec) * 1_000,
           transcriptPath,

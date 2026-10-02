@@ -107,6 +107,20 @@ export interface SystemConfig {
    */
   componentModel?: 'react' | 'custom-elements';
   /**
+   * The application framework the agent writes the task in. Defaults to
+   * 'react'. 'angular' is for a 'custom-elements' system whose consumers are
+   * Angular apps: the workspace becomes fixtures/custom-elements-angular-app (a
+   * standalone Angular component), compile runs the Angular compiler with
+   * strictTemplates, and the mechanical graders read the component's template
+   * through a JSX rendering of it (src/grade/angular.ts), so every dimension
+   * means the same thing it means for a React cell.
+   *
+   * Only valid with componentModel 'custom-elements'. An Angular-native
+   * component library (selectors, @Input()s) would need its own catalog
+   * strategy, which does not exist.
+   */
+  framework?: 'react' | 'angular';
+  /**
    * Accessible-name vocabulary for the a11yStatic grader, merged over
    * conventional defaults (Input, Select, Toggle, Checkbox, IconButton,
    * FormField, ...). Declare only the names that differ in your system: a text

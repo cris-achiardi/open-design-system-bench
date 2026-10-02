@@ -1,0 +1,39 @@
+// The program the compile dimension checks, with `ngc -p tsconfig.json`: the
+// Angular compiler, so templates are type-checked (strictTemplates) as well as
+// the TypeScript around them.
+//
+// Deliberately NO path alias to the design system's source, for the reason
+// custom-elements-app gives: compiling a web-component library's source under
+// this program's options produces errors from the library, not the task. The
+// package is declared as an opaque module in src/system-module.d.ts, and its
+// elements in src/system-elements.d.ts. tsconfig.serve.json adds the alias for
+// `ng serve`, which needs the real code.
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "outDir": "./.ngc-out",
+    "rootDir": "./src",
+    "noEmit": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "preserve",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true,
+    "noEmitOnError": true
+  },
+  "files": ["src/main.ts"],
+  "include": ["src/**/*.d.ts"]
+}

@@ -87,6 +87,10 @@ const SUBSTITUTED_FILES = [
   'src/main.tsx',
   // custom-elements-app only: the ambient declaration for componentsPkg.
   'src/system-module.d.ts',
+  // custom-elements-angular-app only.
+  'src/main.ts',
+  'angular.json',
+  'tsconfig.serve.json',
 ];
 const CSS_ENTRY_PLACEHOLDER = '__CSS_ENTRY__';
 const FOUNDATIONS_CSS_ENTRY_PLACEHOLDER = '__FOUNDATIONS_CSS_ENTRY__';
@@ -110,6 +114,11 @@ function applyImportLinePlaceholder(destDir: string, placeholder: string, import
 }
 
 const PUBLIC_NPM_REGISTRY = 'https://registry.npmjs.org/';
+// npm is a .cmd shim on Windows, which execFile cannot spawn without a shell
+// (ENOENT). The arguments here are fixed flags plus config-supplied package
+// specs, so running through the shell there is safe.
+const NPM_EXEC_OPTS = process.platform === 'win32' ? { shell: true } : {};
+
 const npmInstallArgs = (extra: string[] = []) => [
   'install',
   ...extra,
@@ -127,9 +136,9 @@ const npmInstallArgs = (extra: string[] = []) => [
  * prepareTemplate's npm branch). 'source' mode resolves in order:
  *   1. SystemConfig.fixtureTemplate, when set
  *   2. fixtures/<systemId>-app, when a team has hand-rolled one
- *   3. fixtures/source-app, the generic template
- *   3. fixtures/custom-elements-app when componentModel is 'custom-elements',
- *      else fixtures/source-app
+ *   3. the generic template: fixtures/custom-elements-angular-app when
+ *      framework is 'angular', fixtures/custom-elements-app when
+ *      componentModel is 'custom-elements', else fixtures/source-app
  * Step 3 is what makes source mode work out of the box: the generic template
  * carries __SYSTEM_ROOT__ / __COMPONENTS_PKG__ / __FOUNDATIONS_PKG__
  * placeholders that provisionWorkspace fills in from the system's own config.
@@ -138,12 +147,30 @@ const npmInstallArgs = (extra: string[] = []) => [
  * importing anything per component.
  */
 export function templateDir(system: SystemId, cfg: SystemConfig): string {
+  assertFrameworkSupported(system, cfg);
   if (cfg.consume === 'npm') return preparedNpmDir(system);
   if (cfg.fixtureTemplate) return resolve(PKG_ROOT, cfg.fixtureTemplate);
   const perSystem = join(paths.fixturesDir, `${system}-app`);
   if (existsSync(perSystem)) return perSystem;
+  if (cfg.framework === 'angular') return join(paths.fixturesDir, 'custom-elements-angular-app');
   if (cfg.componentModel === 'custom-elements') return join(paths.fixturesDir, 'custom-elements-app');
   return join(paths.fixturesDir, 'source-app');
+}
+
+/**
+ * 'angular' is supported for web-component systems consumed from source only.
+ * Graded through a JSX rendering of the template, an Angular cell resolves its
+ * design-system usage by dashed tag, which is exactly how a custom-elements
+ * system is graded and means nothing for a library of Angular components.
+ */
+function assertFrameworkSupported(system: SystemId, cfg: SystemConfig): void {
+  if (cfg.framework !== 'angular') return;
+  if (cfg.componentModel !== 'custom-elements') {
+    throw new Error(`"${system}": framework "angular" requires componentModel "custom-elements"`);
+  }
+  if (cfg.consume === 'npm') {
+    throw new Error(`"${system}": framework "angular" supports consume "source" only`);
+  }
 }
 
 /** Source dir for the generic npm-consume template: SystemConfig.fixtureTemplate if set, else the built-in fixtures/npm-app. */
@@ -220,8 +247,8 @@ async function prepareNpmTemplate(system: SystemId, cfg: SystemConfig): Promise<
   // ride along with the package spec so npm resolves them as one tree (a
   // pinned react@18 must downgrade the template's react@19 in the same pass,
   // or the peer solver rejects the install).
-  await execFileAsync('npm', npmInstallArgs(), { cwd: dest, maxBuffer: 50 * 1024 * 1024 });
-  await execFileAsync('npm', npmInstallArgs([...(cfg.fixturePins ?? []), spec]), { cwd: dest, maxBuffer: 50 * 1024 * 1024 });
+  await execFileAsync('npm', npmInstallArgs(), { cwd: dest, maxBuffer: 50 * 1024 * 1024, ...NPM_EXEC_OPTS });
+  await execFileAsync('npm', npmInstallArgs([...(cfg.fixturePins ?? []), spec]), { cwd: dest, maxBuffer: 50 * 1024 * 1024, ...NPM_EXEC_OPTS });
 }
 
 /** npm install in the system's fixture template dir, once. No-op if node_modules already exists. */
@@ -234,7 +261,7 @@ export async function prepareTemplate(system: SystemId, cfg: SystemConfig): Prom
   const dir = templateDir(system, cfg);
   if (existsSync(join(dir, 'node_modules'))) return;
 
-  await execFileAsync('npm', npmInstallArgs(), { cwd: dir, maxBuffer: 50 * 1024 * 1024 });
+  await execFileAsync('npm', npmInstallArgs(), { cwd: dir, maxBuffer: 50 * 1024 * 1024, ...NPM_EXEC_OPTS });
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +422,53 @@ export function renderCustomElementTypes(catalog: SystemCatalog): string {
 export function writeCustomElementTypes(cfg: SystemConfig, destDir: string, catalog: SystemCatalog): void {
   if (cfg.componentModel !== 'custom-elements') return;
   mkdirSync(join(destDir, 'src'), { recursive: true });
-  writeFileSync(join(destDir, 'src', 'system-elements.d.ts'), renderCustomElementTypes(catalog), 'utf8');
+  const rendered = cfg.framework === 'angular' ? renderAngularElementTypes(catalog) : renderCustomElementTypes(catalog);
+  writeFileSync(join(destDir, 'src', 'system-elements.d.ts'), rendered, 'utf8');
+}
+
+/**
+ * The Angular counterpart of renderCustomElementTypes. Angular templates do
+ * not type-check attributes on a custom element (CUSTOM_ELEMENTS_SCHEMA admits
+ * any), so these declarations are not what catches an invented value there:
+ * the compile dimension checks static values against the catalog itself (see
+ * src/grade/angular.ts). They exist so the agent has the same reference a
+ * React cell's agent has, and so `document.querySelector('ds-x')` and a
+ * typed `ElementRef` see the element's properties.
+ */
+export function renderAngularElementTypes(catalog: SystemCatalog): string {
+  const described = new Map<string, string>();
+  const types = new Map<string, string>();
+  for (const comp of catalog.components) {
+    for (const exp of comp.exports) {
+      described.set(exp.displayName, exp.description);
+      for (const prop of exp.props) {
+        if (isSelfContainedType(prop.type)) types.set(`${exp.displayName}\u0000${prop.name}`, prop.type.trim());
+      }
+    }
+  }
+  const tags = catalog.allExports.filter((name) => name.includes('-')).sort();
+  const entries = tags.map((tag) => {
+    const doc = elementDocComment(described.get(tag), '    ');
+    const props = (catalog.allPropsByExport[tag] ?? [])
+      .map((prop) => `      ${JSON.stringify(prop)}?: ${types.get(`${tag}\u0000${prop}`) ?? 'unknown'};`)
+      .join('\n');
+    return `${doc}    ${JSON.stringify(tag)}: HTMLElement & {\n${props}\n    };`;
+  });
+  return [
+    '// GENERATED at workspace provision time from the extracted catalog.',
+    '// Every element this design system ships, with the attributes it accepts.',
+    '// Attribute names are written as they appear in a template; a kebab-case',
+    '// attribute sets the camelCase property of the same name.',
+    "// Do not edit: it is the system's API surface, not part of the task.",
+    'declare global {',
+    '  interface HTMLElementTagNameMap {',
+    entries.join('\n'),
+    '  }',
+    '}',
+    '',
+    'export {};',
+    '',
+  ].join('\n');
 }
 
 export interface ProvisionOptions {

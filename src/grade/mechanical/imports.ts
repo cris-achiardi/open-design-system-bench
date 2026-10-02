@@ -7,6 +7,8 @@ import type { GradeContext } from '../context.ts';
 
 const REACT_PREFIXES = ['react', 'react-dom'];
 const VITE_PREFIXES = ['vite'];
+// An Angular cell's framework and the runtime its generated code needs.
+const ANGULAR_PREFIXES = ['@angular', 'rxjs', 'tslib'];
 
 function isRelative(source: string): boolean {
   return source.startsWith('./') || source.startsWith('../');
@@ -26,6 +28,7 @@ function isAllowed(source: string, ctx: GradeContext): boolean {
   if (matchesPkg(source, ctx.systemCfg.foundationsPkg)) return true;
   if (matchesPrefixList(source, REACT_PREFIXES)) return true;
   if (matchesPrefixList(source, VITE_PREFIXES)) return true;
+  if (ctx.systemCfg.framework === 'angular' && matchesPrefixList(source, ANGULAR_PREFIXES)) return true;
   const extra = ctx.task.mechanicalOverrides?.extraAllowedImports ?? [];
   if (matchesPrefixList(source, extra)) return true;
   return false;

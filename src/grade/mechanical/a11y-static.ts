@@ -357,7 +357,7 @@ function analyzeFileA11y(path: string, source: string, vocab: A11yVocab): A11yEr
 
   let ast;
   try {
-    ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'], errorRecovery: true });
+    ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx', 'decorators-legacy'], errorRecovery: true });
   } catch {
     return errors; // compile.ts is responsible for surfacing syntax errors
   }

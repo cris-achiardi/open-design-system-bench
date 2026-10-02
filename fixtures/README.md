@@ -28,6 +28,7 @@ the castings.
 | `source-app` | `source` - aliases the fixture straight at the system's source directory, no build step | yes |
 | `npm-app` | `npm` - installs the published package into a prepared workspace | yes |
 | `custom-elements-app` | `source`, for systems that ship web components | yes |
+| `custom-elements-angular-app` | `source`, for web-component systems consumed from Angular (`"framework": "angular"`) | yes |
 | anything else | either | **no, gitignored** |
 
 `custom-elements-app` is picked automatically when a system declares
@@ -140,6 +141,21 @@ keyboard-operable button: list it under `interactive` (declared `controls` and `
 already). And `<ds-toggle>Email digests</ds-toggle>` reads as an unnamed control, because text
 children only name the conventional `Checkbox` and `Radio`: list every control whose slotted text
 is its label under `childrenNamed`. A `<label for>` is matched as `htmlFor` is.
+
+## The Angular template
+
+`custom-elements-angular-app` is picked when a system sets `"framework": "angular"`. It is a
+zoneless standalone Angular app whose `AppComponent` renders `TaskComponent`
+(`src/task/task.component.ts`, selector `task-screen`), which declares `CUSTOM_ELEMENTS_SCHEMA` so
+the system's tags are accepted.
+
+It has two TypeScript configs, for the reason `custom-elements-app` has no source alias.
+`tsconfig.json` is the program the compile dimension checks (`ngc -p tsconfig.json`, `noEmit`,
+`strictTemplates`); it declares the package as an opaque module (`src/system-module.d.ts`) and never
+reaches the library's source. `tsconfig.serve.json` extends it with the path alias `ng serve` needs
+to run the real elements. The registry entry it aliases is `<componentsSrc>/index.ts`, as the Vite
+alias in `custom-elements-app` is; a system whose registry lives elsewhere serves without its
+elements, and grades the same.
 
 ## Docs and skills at the guided context levels
 
