@@ -100,6 +100,10 @@ const DEFAULT_LABELS = ['label', 'Label', 'FormLabel'];
 // without an explicit htmlFor.
 const DEFAULT_FORM_CONTEXT = ['FormField', 'FormControl', 'label', 'Label'];
 
+// Controls whose text children render as their label, so the text is the
+// accessible name (<Checkbox>Email</Checkbox>).
+const DEFAULT_CHILDREN_NAMED = ['Checkbox', 'Radio'];
+
 /** The resolved per-system vocabulary: conventional defaults plus whatever the system declares. */
 interface A11yVocab {
   controls: Set<string>;
@@ -107,6 +111,8 @@ interface A11yVocab {
   labels: Set<string>;
   formContext: Set<string>;
   placeholderNamed: Set<string>;
+  childrenNamed: Set<string>;
+  interactive: Set<string>;
 }
 
 function resolveVocab(cfg: SystemConfig): A11yVocab {
@@ -120,6 +126,11 @@ function resolveVocab(cfg: SystemConfig): A11yVocab {
     // No default: placeholder-as-accessible-name is an anti-pattern, honoured
     // only where a system documents it as the contract.
     placeholderNamed: new Set(a.placeholderNamed ?? []),
+    childrenNamed: merge(DEFAULT_CHILDREN_NAMED, a.childrenNamed),
+    // Elements that are keyboard-operable by themselves. Declared controls and
+    // icon-only controls are interactive by definition, so they count without
+    // being listed twice.
+    interactive: new Set([...(a.interactive ?? []), ...(a.controls ?? []), ...(a.iconOnly ?? [])]),
   };
 }
 
@@ -329,8 +340,9 @@ function controlHasAccessibleName(opts: {
     return elementHasAccessibleText(jsxElement);
   }
 
-  // Checkbox / Radio with text children (instead of a `label` prop).
-  if ((tag === 'Checkbox' || tag === 'Radio') && elementHasAccessibleText(jsxElement)) return true;
+  // Text children (instead of a `label` prop), for controls that render them as
+  // their label.
+  if (vocab.childrenNamed.has(tag) && elementHasAccessibleText(jsxElement)) return true;
 
   return false;
 }
@@ -354,7 +366,9 @@ function analyzeFileA11y(path: string, source: string, vocab: A11yVocab): A11yEr
   try {
     traverse(ast, {
       JSXOpeningElement(p: any) {
-        const htmlFor = findAttr(p.node.attributes, 'htmlFor');
+        // `for` is the HTML spelling, which React 19 passes through and a
+        // web-component system's docs teach.
+        const htmlFor = findAttr(p.node.attributes, 'htmlFor') ?? findAttr(p.node.attributes, 'for');
         const key = attrFingerprint(htmlFor);
         if (key) labelledIds.add(key);
       },
@@ -420,7 +434,11 @@ function analyzeFileA11y(path: string, source: string, vocab: A11yVocab): A11yEr
             !findAttr(attributes, 'onKeyDown') &&
             !findAttr(attributes, 'onKeyUp') &&
             !findAttr(attributes, 'onKeyPress') &&
-            !INTERACTIVE_TAGS.has(tag)
+            !INTERACTIVE_TAGS.has(tag) &&
+            // A custom element is lowercase, so it lands in this host-element
+            // branch, but a declared design-system element handles its own
+            // keyboard interaction.
+            !vocab.interactive.has(tag)
           ) {
             const roleAttr = findAttr(attributes, 'role');
             const role = roleAttr ? staticAttrValue(roleAttr) : undefined;
@@ -494,7 +512,7 @@ function analyzeFileA11y(path: string, source: string, vocab: A11yVocab): A11yEr
       JSXElement(p: any) {
         const opening = p.node.openingElement;
         if (!isHostElement(opening.name) || opening.name.name !== 'label') return;
-        if (findAttr(opening.attributes, 'htmlFor')) return;
+        if (findAttr(opening.attributes, 'htmlFor') || findAttr(opening.attributes, 'for')) return;
 
         let hasControl = false;
         p.traverse({

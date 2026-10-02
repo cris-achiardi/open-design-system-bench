@@ -390,6 +390,63 @@ test('gradeA11yStatic passes a Checkbox that exposes a label prop', async () => 
   assert.equal(result.gate, 'pass');
 });
 
+// A custom element is lowercase, so JSX classes it with the native host
+// elements, but it is not one: a design system's <ds-button> is keyboard-operable
+// and names itself from its slotted text, exactly as its React counterpart does.
+const ceA11yCfg = { ...systemCfg, componentModel: 'custom-elements' as const };
+
+test('onClick on a declared interactive custom element is not click-without-key', async () => {
+  const src = file('src/App.tsx', `export function App() { return <ds-button onClick={() => {}}>Save</ds-button>; }\n`);
+  const result = await gradeA11yStatic({ ...makeCtx([src]), systemCfg: { ...ceA11yCfg, a11y: { interactive: ['ds-button'] } } });
+  assert.equal(result.gate, 'pass', JSON.stringify(result.diffs));
+});
+
+test('declared controls and icon-only elements count as interactive too', async () => {
+  const src = file(
+    'src/App.tsx',
+    `export function App() { return <ds-icon-button aria-label="Close" onClick={() => {}} />; }\n`,
+  );
+  const result = await gradeA11yStatic({ ...makeCtx([src]), systemCfg: { ...ceA11yCfg, a11y: { iconOnly: ['ds-icon-button'] } } });
+  assert.equal(result.gate, 'pass', JSON.stringify(result.diffs));
+});
+
+test('onClick on an undeclared custom element is still click-without-key', async () => {
+  const src = file('src/App.tsx', `export function App() { return <ds-card onClick={() => {}}>Open</ds-card>; }\n`);
+  const result = await gradeA11yStatic({ ...makeCtx([src]), systemCfg: { ...ceA11yCfg, a11y: { interactive: ['ds-button'] } } });
+  assert.ok(result.diffs.some((d) => d.message.includes('onClick without a keyboard handler on non-interactive <ds-card>')));
+});
+
+test('a control declared childrenNamed takes its accessible name from its text', async () => {
+  const src = file('src/App.tsx', `export function App() { return <ds-switch name="email">Email digests</ds-switch>; }\n`);
+  const named = await gradeA11yStatic({
+    ...makeCtx([src]),
+    systemCfg: { ...ceA11yCfg, a11y: { controls: ['ds-switch'], childrenNamed: ['ds-switch'] } },
+  });
+  assert.equal(named.gate, 'pass', JSON.stringify(named.diffs));
+
+  const empty = file('src/App.tsx', `export function App() { return <ds-switch name="email"></ds-switch>; }\n`);
+  const unnamed = await gradeA11yStatic({
+    ...makeCtx([empty]),
+    systemCfg: { ...ceA11yCfg, a11y: { controls: ['ds-switch'], childrenNamed: ['ds-switch'] } },
+  });
+  assert.notEqual(unnamed.gate, 'pass', 'an empty childrenNamed control is still unnamed');
+});
+
+test('text children do not name a control that is not declared childrenNamed', async () => {
+  const src = file('src/App.tsx', `export function App() { return <ds-input>Email</ds-input>; }\n`);
+  const result = await gradeA11yStatic({ ...makeCtx([src]), systemCfg: { ...ceA11yCfg, a11y: { controls: ['ds-input'] } } });
+  assert.notEqual(result.gate, 'pass', 'an input does not render its children as a label');
+});
+
+test('a <label for> names a custom-element control the same way htmlFor does', async () => {
+  const src = file(
+    'src/App.tsx',
+    `export function App() { return <div><label for="email">Email</label><ds-input id="email" /></div>; }\n`,
+  );
+  const result = await gradeA11yStatic({ ...makeCtx([src]), systemCfg: { ...ceA11yCfg, a11y: { controls: ['ds-input'] } } });
+  assert.equal(result.gate, 'pass', JSON.stringify(result.diffs));
+});
+
 // ---------------------------------------------------------------------------
 // clean file -> everything passes
 // ---------------------------------------------------------------------------

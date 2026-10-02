@@ -126,6 +126,20 @@ export interface SystemConfig {
      * default, since placeholder-as-name is normally an anti-pattern.
      */
     placeholderNamed?: string[];
+    /**
+     * Controls whose text children render as their label, so the text is the
+     * accessible name (`<ds-switch>Email digests</ds-switch>`). Merged over
+     * the defaults `Checkbox` and `Radio`.
+     */
+    childrenNamed?: string[];
+    /**
+     * Custom elements that are keyboard-operable by themselves (a
+     * `<ds-button>`, a `<ds-tab>`), so an `onClick` on them is not
+     * click-without-key. Declared `controls` and `iconOnly` count already.
+     * Only matters for lowercase, dashed tags: a PascalCase component is never
+     * held to the host-element checks.
+     */
+    interactive?: string[];
   };
   /**
    * npm install spec for 'npm' consume mode, e.g. "@acme/ui" or

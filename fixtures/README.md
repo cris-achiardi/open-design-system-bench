@@ -125,8 +125,21 @@ scores near 100 no matter what the agent writes. List your own tags under the sy
 config to get a real reading:
 
 ```json
-"a11y": { "controls": ["ds-input", "ds-select", "ds-toggle"], "iconOnly": ["ds-icon-button"] }
+"a11y": {
+  "controls": ["ds-input", "ds-select", "ds-toggle"],
+  "iconOnly": ["ds-icon-button"],
+  "interactive": ["ds-button", "ds-tab"],
+  "childrenNamed": ["ds-toggle", "ds-checkbox"]
+}
 ```
+
+The last two exist because a dashed tag is lowercase, and JSX treats every lowercase tag as a
+native element. Without them two checks misfire on correct code. `onClick` on a `<ds-button>` reads
+as click-without-key on a non-interactive element, because the grader cannot know the element is a
+keyboard-operable button: list it under `interactive` (declared `controls` and `iconOnly` count
+already). And `<ds-toggle>Email digests</ds-toggle>` reads as an unnamed control, because text
+children only name the conventional `Checkbox` and `Radio`: list every control whose slotted text
+is its label under `childrenNamed`. A `<label for>` is matched as `htmlFor` is.
 
 ## Docs and skills at the guided context levels
 

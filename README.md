@@ -124,7 +124,7 @@ there (or pass `--systems a,b`) to benchmark several at once.
 | `packageSpec` | `npm` only | npm install spec, e.g. `"@acme/ui"` or `"@acme/ui@^2.0.0"`; defaults to `componentsPkg` |
 | `cssEntry` | no | Import specifier for the system's stylesheet, e.g. `"@acme/ui/styles.css"`; optional, `npm` mode only |
 | `fixturePins` | no | Extra npm specs installed alongside `packageSpec`, for peer-dependency conflicts (a library still on React 18 needs `["react@^18.3.1", …]` against the template's React 19) |
-| `a11y` | no | Your accessible-name vocabulary for the a11yStatic grader (`controls`, `iconOnly`, `labels`, `formContext`, `placeholderNamed`). Merged with conventional defaults, so declare only what differs |
+| `a11y` | no | Your accessible-name vocabulary for the a11yStatic grader (`controls`, `iconOnly`, `labels`, `formContext`, `placeholderNamed`, `childrenNamed`, `interactive`). Merged with conventional defaults, so declare only what differs |
 
 ## npm-consume mode
 
